@@ -168,13 +168,12 @@ def load_model():
     return model, scaler, features
 
 def predict_risk(model, scaler, feature_names, user_inputs):
-    """Build feature vector, scale, predict. Return (label int, confidence %)."""
+    """Build feature vector, scale, predict. Return label int only."""
     row = {f: user_inputs.get(f, 5) for f in feature_names}
     X   = np.array([[row[f] for f in feature_names]])
     X_s = scaler.transform(X)
-    label     = int(model.predict(X_s)[0])
-    proba_pct = int(model.predict_proba(X_s)[0][label] * 100)
-    return label, proba_pct
+    label = int(model.predict(X_s)[0])
+    return label
 
 def rule_based_fallback(user_inputs):
     """Weighted fallback when model files are missing."""
@@ -183,9 +182,9 @@ def rule_based_fallback(user_inputs):
            + user_inputs.get("Urbanization",     5) * 2
            + user_inputs.get("_region_bonus",    3))
     pct = int(score / (9*3 + 9*2 + 9*2 + 4) * 100)
-    if pct < 40: return 0, pct
-    if pct < 68: return 1, pct
-    return 2, pct
+    if pct < 40: return 0
+    if pct < 68: return 1
+    return 2
 
 
 # ── UI helpers ─────────────────────────────────────────────────────────────────
@@ -236,14 +235,13 @@ def render_recommendations(risk_level):
             unsafe_allow_html=True
         )
 
-def render_risk_result(risk_level, score_pct):
+def render_risk_result(risk_level):
     color  = RISK_COLORS[risk_level]
     border = RISK_BORDER[risk_level]
     label  = LABEL_MAP[risk_level]
     st.markdown(
         f'<div class="risk-card" style="background:{color}; border:3px solid {border};">'
-        f'<div class="risk-score-big" style="color:{border};">{score_pct}%</div>'
-        f'<div class="risk-badge" style="background:{border}; color:white;">{label}</div>'
+        f'<div class="risk-badge" style="background:{border}; color:white; font-size:22px; padding:10px 28px;">{label}</div>'
         f'</div>',
         unsafe_allow_html=True
     )
@@ -257,7 +255,6 @@ def screen_who_are_you():
     st.caption("Answer some questions")
     st.markdown("**Who are you?**")
 
-    # FIX 1: buttons are already stacked vertically by render_option_buttons
     selected = render_option_buttons([
         ("🏠  City resident — I live in a town or city", "resident"),
         ("🌱  Farmer — I work the land",                  "farmer"),
@@ -271,7 +268,6 @@ def screen_who_are_you():
     ])
 
     if selected:
-        # FIX 2: type="primary" → dark bg + white text (handled in CSS)
         if st.button("Continue →", key="go_s2", type="primary"):
             st.session_state.step = 2
             st.rerun()
@@ -280,10 +276,18 @@ def screen_who_are_you():
 def screen_region():
     render_header()
     render_progress(1)
-    st.subheader("Where is your farm?")
-    st.caption("Choose your region for accurate advice")
 
-    # FIX 4: meaningful region icons instead of earth globes
+    # Title adapts to role
+    role = st.session_state.get("role", "farmer")
+    titles = {
+        "farmer":   ("Where is your farm?",     "Choose your region for accurate advice"),
+        "resident": ("Where do you live?",       "Choose your region for accurate advice"),
+        "mayor":    ("Where is your community?", "Choose your region for accurate advice"),
+    }
+    title, subtitle = titles.get(role, titles["farmer"])
+    st.subheader(title)
+    st.caption(subtitle)
+
     selected = render_option_buttons([
         ("🌾  Africa — Sahel, East Africa, West Africa",   "africa"),
         ("🌧️  Asia — South Asia, Southeast Asia",           "asia"),
@@ -308,7 +312,14 @@ def screen_region():
 def screen_rainfall():
     render_header()
     render_progress(2)
-    st.subheader("How often does rain fall on your land?")
+
+    role = st.session_state.get("role", "farmer")
+    titles = {
+        "farmer":   "How often does rain fall on your land?",
+        "resident": "How often does it rain heavily in your area?",
+        "mayor":    "How intense is rainfall in your community?",
+    }
+    st.subheader(titles.get(role, titles["farmer"]))
     st.caption("Protect your farm and family")
 
     selected = render_option_buttons([
@@ -329,7 +340,14 @@ def screen_rainfall():
 def screen_trees():
     render_header()
     render_progress(3)
-    st.subheader("Are there trees and vegetation around your farm?")
+
+    role = st.session_state.get("role", "farmer")
+    titles = {
+        "farmer":   "Are there trees and vegetation around your farm?",
+        "resident": "Are there trees and green spaces in your neighbourhood?",
+        "mayor":    "How much green space and vegetation is in your community?",
+    }
+    st.subheader(titles.get(role, titles["farmer"]))
     st.caption("Protect your farm and family")
 
     selected = render_option_buttons([
@@ -356,7 +374,14 @@ def screen_trees():
 def screen_drainage():
     render_header()
     render_progress(4)
-    st.subheader("How is the ground near your land?")
+
+    role = st.session_state.get("role", "farmer")
+    titles = {
+        "farmer":   "How is the ground near your land?",
+        "resident": "How is the ground in your neighbourhood?",
+        "mayor":    "How is the urban infrastructure in your community?",
+    }
+    st.subheader(titles.get(role, titles["farmer"]))
     st.caption("Protect your farm and family")
 
     selected = render_option_buttons([
@@ -436,51 +461,29 @@ def screen_results():
 
     model, scaler, feature_names = load_model()
     if model is not None:
-        risk_level, score_pct = predict_risk(model, scaler, feature_names, user_inputs)
-        source = "Random Forest ML model"
+        risk_level = predict_risk(model, scaler, feature_names, user_inputs)
     else:
-        risk_level, score_pct = rule_based_fallback(user_inputs)
-        source = "rule-based estimate (train model for ML predictions)"
+        risk_level = rule_based_fallback(user_inputs)
 
-    render_risk_result(risk_level, score_pct)
+    render_risk_result(risk_level)
+
+    role = st.session_state.get("role", "farmer")
 
     headlines = {
-        0: "Your farm is relatively safe",
-        1: "Take precautions this season",
-        2: "Your farm needs protection now",
+        0: {"farmer": "Your farm is relatively safe",       "resident": "Your area is relatively safe",       "mayor": "Your community is relatively safe"},
+        1: {"farmer": "Take precautions this season",       "resident": "Take precautions this season",       "mayor": "Your community needs attention"},
+        2: {"farmer": "Your farm needs protection now",     "resident": "Your area needs protection now",     "mayor": "Your community needs urgent action"},
     }
     descs = {
-        0: "Flood risk is manageable. Keep monitoring your land.",
+        0: "Flood risk is manageable. Keep monitoring and stay prepared.",
         1: "Moderate risk. Simple measures can significantly reduce damage.",
-        2: "High risk. Immediate action can protect your crops and family.",
+        2: "High risk. Immediate action can protect lives and property.",
     }
-    st.markdown(f"### {headlines[risk_level]}")
+    st.markdown(f"### {headlines[risk_level].get(role, headlines[risk_level]['farmer'])}")
     st.caption(descs[risk_level])
-    st.caption(f"_Source: {source}_")
     st.markdown("---")
     st.markdown("**Recommended actions**")
     render_recommendations(risk_level)
-
-    # ── Debug panel: shows exactly what was sent to the model ──
-    # Remove this block before final deployment
-    with st.expander("🔍 Debug — what the model received", expanded=False):
-        st.caption("Your 3 answers mapped to all 20 features:")
-        import pandas as pd
-        debug_df = pd.DataFrame([
-            {"Feature": k, "Value sent to model": v,
-             "Source": "user answer" if v not in [5, 10-5] or k in
-                       ["MonsoonIntensity","Deforestation","WetlandLoss",
-                        "Urbanization","TopographyDrainage","DrainageSystems",
-                        "DeterioratingInfrastructure","InadequatePlanning",
-                        "Encroachments","Siltation","Landslides","AgriculturalPractices",
-                        "ClimateChange","CoastalVulnerability"]
-                       else "default (5 = neutral)"}
-            for k, v in user_inputs.items()
-        ])
-        st.dataframe(debug_df, use_container_width=True, hide_index=True)
-        st.caption(f"rain={rain}  trees={trees}  drainage={drainage}  region={region}")
-        st.caption(f"Predicted class: {risk_level}  |  Confidence: {score_pct}%")
-
     st.markdown("---")
 
     if st.button("🔄  Start over", key="restart"):
