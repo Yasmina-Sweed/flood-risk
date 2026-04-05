@@ -1,3 +1,4 @@
+
 import streamlit as st
 import numpy as np
 import pickle, os
@@ -373,21 +374,65 @@ def screen_drainage():
             st.session_state.step = 6; st.rerun()
 
 
+def build_feature_vector(rain, trees, drainage, region):
+    """
+    Map the 3 user answers → all 20 model features.
+
+    Logic per feature:
+    - rain     (1=dry, 5=some, 9=heavy) maps directly to rainfall/water features
+    - trees    (1=many, 5=some, 9=none) — NOTE: inverted: fewer trees = more risk
+    - drainage (1=soil, 5=mixed, 9=urban) maps to urbanization/infrastructure features
+    - region   adds a climate/coastal offset for geographic flood seasonality
+
+    Features NOT covered by questions default to their dataset mean (~5).
+    This is intentional — we set the KNOWN ones correctly and let unknowns
+    stay neutral, so extreme answers produce extreme predictions.
+    """
+    # Region adjusts climate-related features
+    region_offsets = {
+        "africa":       {"ClimateChange": 7, "CoastalVulnerability": 4},
+        "asia":         {"ClimateChange": 8, "CoastalVulnerability": 7},
+        "southamerica": {"ClimateChange": 6, "CoastalVulnerability": 5},
+    }
+    r = region_offsets.get(region, {"ClimateChange": 5, "CoastalVulnerability": 5})
+
+    return {
+        # ── Directly mapped from user answers ──────────────────
+        "MonsoonIntensity":                rain,
+        "Deforestation":                   trees,          # 9=no trees = high deforestation
+        "WetlandLoss":                     trees,          # no trees → wetland loss too
+        "Urbanization":                    drainage,       # concrete = high urbanization
+        "TopographyDrainage":              drainage,       # concrete = poor drainage capacity
+        "DrainageSystems":                 10 - drainage,  # inverted: urban = worse drainage
+        "DeterioratingInfrastructure":     drainage,       # urban = more infrastructure issues
+        "InadequatePlanning":              drainage,       # urban sprawl = poor planning
+        "Encroachments":                   drainage,       # urban = more encroachments
+        "Siltation":                       rain,           # heavy rain → more siltation
+        "Landslides":                      rain,           # heavy rain → landslide risk
+        "AgriculturalPractices":           trees,          # deforested = intensive agriculture
+        # ── Region-adjusted features ───────────────────────────
+        "ClimateChange":                   r["ClimateChange"],
+        "CoastalVulnerability":            r["CoastalVulnerability"],
+        # ── Fixed neutral (not asked, stay at dataset mean) ────
+        "RiverManagement":                 5,
+        "DamsQuality":                     5,
+        "IneffectiveDisasterPreparedness": 5,
+        "Watersheds":                      5,
+        "PopulationScore":                 5,
+        "PoliticalFactors":                5,
+    }
+
+
 def screen_results():
     render_header()
     render_progress(5)
 
-    region_bonus = {"africa": 4, "asia": 3, "southamerica": 2}
-    user_inputs = {
-        "MonsoonIntensity":   st.session_state.get("rain",     5),
-        "Deforestation":      st.session_state.get("trees",    5),
-        "Urbanization":       st.session_state.get("drainage", 5),
-        "TopographyDrainage": st.session_state.get("drainage", 5),
-        "DrainageSystems":    10 - st.session_state.get("drainage", 5),
-        "ClimateChange":      5,
-        "WetlandLoss":        st.session_state.get("trees",    5),
-        "_region_bonus":      region_bonus.get(st.session_state.get("region", "asia"), 3),
-    }
+    rain     = st.session_state.get("rain",     5)
+    trees    = st.session_state.get("trees",    5)
+    drainage = st.session_state.get("drainage", 5)
+    region   = st.session_state.get("region",   "asia")
+
+    user_inputs = build_feature_vector(rain, trees, drainage, region)
 
     model, scaler, feature_names = load_model()
     if model is not None:
@@ -415,6 +460,27 @@ def screen_results():
     st.markdown("---")
     st.markdown("**Recommended actions**")
     render_recommendations(risk_level)
+
+    # ── Debug panel: shows exactly what was sent to the model ──
+    # Remove this block before final deployment
+    with st.expander("🔍 Debug — what the model received", expanded=False):
+        st.caption("Your 3 answers mapped to all 20 features:")
+        import pandas as pd
+        debug_df = pd.DataFrame([
+            {"Feature": k, "Value sent to model": v,
+             "Source": "user answer" if v not in [5, 10-5] or k in
+                       ["MonsoonIntensity","Deforestation","WetlandLoss",
+                        "Urbanization","TopographyDrainage","DrainageSystems",
+                        "DeterioratingInfrastructure","InadequatePlanning",
+                        "Encroachments","Siltation","Landslides","AgriculturalPractices",
+                        "ClimateChange","CoastalVulnerability"]
+                       else "default (5 = neutral)"}
+            for k, v in user_inputs.items()
+        ])
+        st.dataframe(debug_df, use_container_width=True, hide_index=True)
+        st.caption(f"rain={rain}  trees={trees}  drainage={drainage}  region={region}")
+        st.caption(f"Predicted class: {risk_level}  |  Confidence: {score_pct}%")
+
     st.markdown("---")
 
     if st.button("🔄  Start over", key="restart"):
