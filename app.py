@@ -3,7 +3,7 @@ import numpy as np
 import pickle, os
 
 st.set_page_config(page_title="Flood Risk for Farmers", page_icon="🌊",
-                   layout="centered", initial_sidebar_state="collapsed")
+                   layout="wide", initial_sidebar_state="collapsed")
 
 MODEL_PATH  = "model.pkl"
 SCALER_PATH = "scaler.pkl"
@@ -30,24 +30,31 @@ RECOMMENDATIONS = {
 def inject_css():
     st.markdown("""
     <style>
-        /* ── FIX 1: full-width layout, not narrow phone column ── */
+        /* ── LAYOUT: reduce top padding on wide layout ── */
         .block-container {
-            max-width: 720px;
-            padding: 2rem 2rem 4rem;
+            padding-top: 2rem;
+            padding-bottom: 4rem;
         }
 
-        /* ── FIX 3: remove copy-to-clipboard icon on buttons ──
-           The icon appears because Streamlit uses monospace font for buttons.
-           Forcing font-family: sans-serif removes it. */
+        /* ── OPTION BUTTONS: plain sans-serif, no monospace, no copy icon ──
+           Root cause of copy icon: Streamlit wraps button text in a <p> tag
+           that inherits a code/monospace font when it detects non-alpha prefix
+           characters like spaces. Switching the entire button + all children
+           to sans-serif and overriding font-family on every child eliminates it. */
+        div.stButton > button,
+        div.stButton > button *,
+        div.stButton > button p {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+            font-size: 15px !important;
+            font-weight: 400 !important;
+            letter-spacing: normal !important;
+        }
         div.stButton > button {
             width: 100%;
             background: white;
-            border: 1.5px solid #e0e0e0;
+            border: 1.5px solid #d0d0d0;
             border-radius: 12px;
             padding: 16px 20px;
-            font-size: 15px;
-            font-family: sans-serif !important;   /* ← kills the copy icon */
-            font-weight: 400;
             color: #1a1a1a;
             text-align: left;
             margin-bottom: 10px;
@@ -60,19 +67,24 @@ def inject_css():
             color: #1a5fa8;
         }
 
-        /* ── FIX 2: primary "Continue" button — dark bg, white text ── */
+        /* ── PRIMARY BUTTON (Continue / See my risk) — dark bg, white text ── */
         div.stButton > button[kind="primary"],
         div.stButton > button[data-testid="baseButton-primary"] {
-            background: #1a1a1a !important;
-            color: white !important;
+            background: #1c1c1e !important;
+            color: #ffffff !important;
             border: none !important;
-            font-weight: 600 !important;
             text-align: center !important;
+        }
+        div.stButton > button[kind="primary"] p,
+        div.stButton > button[data-testid="baseButton-primary"] p,
+        div.stButton > button[kind="primary"] *,
+        div.stButton > button[data-testid="baseButton-primary"] * {
+            color: #ffffff !important;
+            font-weight: 600 !important;
         }
         div.stButton > button[kind="primary"]:hover,
         div.stButton > button[data-testid="baseButton-primary"]:hover {
-            background: #333 !important;
-            color: white !important;
+            background: #3a3a3c !important;
         }
 
         /* Fact / info box */
@@ -138,15 +150,6 @@ def inject_css():
             color: #666;
         }
 
-        /* ── FIX 1 continued: option buttons in a vertical stack, full width ── */
-        /* Role and region cards use CSS grid for a clean 1-column layout */
-        .option-grid-1col {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
         #MainMenu, footer, header { visibility: hidden; }
     </style>""", unsafe_allow_html=True)
 
@@ -207,14 +210,16 @@ def render_fact_box(items, title="Did you know?"):
 
 def render_option_buttons(options, key):
     """
-    Render option buttons stacked vertically (1 column).
-    FIX 3: font-family:sans-serif in CSS removes the copy icon.
-    Returns the currently selected value.
+    Render option buttons stacked vertically.
+    IMPORTANT: Do NOT use leading spaces in button labels — Streamlit detects
+    them as code blocks and renders a monospace font + copy icon.
+    Selected state is shown by injecting a CSS class via markdown instead.
     """
     selected = st.session_state.get(key)
     for label, value in options:
-        prefix = "✓  " if selected == value else "     "
-        if st.button(prefix + label, key=f"btn_{key}_{value}"):
+        # Use a visible checkmark only when selected — no leading spaces ever
+        display_label = f"✓  {label}" if selected == value else label
+        if st.button(display_label, key=f"btn_{key}_{value}"):
             st.session_state[key] = value
             st.rerun()
     return st.session_state.get(key)
@@ -433,7 +438,13 @@ def main():
     inject_css()
     if "step" not in st.session_state:
         st.session_state.step = 1
-    SCREENS.get(st.session_state.step, screen_who_are_you)()
+
+    # Wide layout: use columns to give the form a proper webapp width.
+    # [1, 3, 1] means: small left margin | main content (75% width) | small right margin
+    # This fills the screen properly instead of being squeezed into a phone column.
+    _, col, _ = st.columns([1, 3, 1])
+    with col:
+        SCREENS.get(st.session_state.step, screen_who_are_you)()
 
 if __name__ == "__main__":
     main()
