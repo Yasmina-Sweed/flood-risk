@@ -3,7 +3,7 @@ import streamlit as st
 import numpy as np
 import pickle, os
 
-st.set_page_config(page_title="Flood Risk for Farmers", page_icon="🌊",
+st.set_page_config(page_title="Flood Risk", page_icon="🌊",
                    layout="wide", initial_sidebar_state="collapsed")
 
 MODEL_PATH  = "model.pkl"
