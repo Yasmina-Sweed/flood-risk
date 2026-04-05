@@ -1,4 +1,3 @@
-
 import streamlit as st
 import numpy as np
 import pickle, os
@@ -31,30 +30,128 @@ RECOMMENDATIONS = {
 def inject_css():
     st.markdown("""
     <style>
-        .block-container { max-width: 420px; padding: 1.5rem 1rem 3rem; }
-        div.stButton > button { width:100%; background:white; border:1px solid #e0e0e0;
-            border-radius:12px; padding:14px 16px; font-size:15px; text-align:left;
-            margin-bottom:8px; }
-        div.stButton > button:hover { border-color:#4A90D9; background:#EBF4FF; color:#1a5fa8; }
-        .fact-box { background:#FFF8F0; border:1px solid #F5D5B0; border-radius:12px;
-            padding:14px 16px; margin:16px 0; font-size:13px; color:#5a4030; }
-        .fact-box ul { margin:6px 0 0 16px; } .fact-box li { margin-bottom:4px; }
-        .risk-card { border-radius:16px; padding:20px; text-align:center; margin:16px 0; }
-        .risk-score-big { font-size:48px; font-weight:600; line-height:1; }
-        .risk-badge { display:inline-block; font-size:14px; font-weight:600;
-            padding:4px 14px; border-radius:20px; margin-top:6px; }
-        .rec-card { background:#f7f7f7; border-radius:10px; padding:12px 14px;
-            margin-bottom:8px; display:flex; gap:10px; align-items:flex-start; }
-        .rec-icon { font-size:20px; flex-shrink:0; }
-        .rec-title { font-size:13px; font-weight:600; color:#1a1a1a; }
-        .rec-text { font-size:12px; color:#555; line-height:1.45; }
-        .app-header { display:flex; justify-content:space-between; align-items:center;
-            padding-bottom:12px; border-bottom:1px solid #eee; margin-bottom:20px; }
-        .app-title { font-size:15px; font-weight:600; }
-        .lang-badge { font-size:11px; font-weight:600; border:1px solid #ccc;
-            border-radius:6px; padding:2px 8px; color:#666; }
-        #MainMenu, footer, header { visibility:hidden; }
+        /* ── FIX 1: full-width layout, not narrow phone column ── */
+        .block-container {
+            max-width: 720px;
+            padding: 2rem 2rem 4rem;
+        }
+
+        /* ── FIX 3: remove copy-to-clipboard icon on buttons ──
+           The icon appears because Streamlit uses monospace font for buttons.
+           Forcing font-family: sans-serif removes it. */
+        div.stButton > button {
+            width: 100%;
+            background: white;
+            border: 1.5px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 16px 20px;
+            font-size: 15px;
+            font-family: sans-serif !important;   /* ← kills the copy icon */
+            font-weight: 400;
+            color: #1a1a1a;
+            text-align: left;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        div.stButton > button:hover {
+            border-color: #4A90D9;
+            background: #EBF4FF;
+            color: #1a5fa8;
+        }
+
+        /* ── FIX 2: primary "Continue" button — dark bg, white text ── */
+        div.stButton > button[kind="primary"],
+        div.stButton > button[data-testid="baseButton-primary"] {
+            background: #1a1a1a !important;
+            color: white !important;
+            border: none !important;
+            font-weight: 600 !important;
+            text-align: center !important;
+        }
+        div.stButton > button[kind="primary"]:hover,
+        div.stButton > button[data-testid="baseButton-primary"]:hover {
+            background: #333 !important;
+            color: white !important;
+        }
+
+        /* Fact / info box */
+        .fact-box {
+            background: #FFF8F0;
+            border: 1px solid #F5D5B0;
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin: 16px 0;
+            font-size: 13px;
+            color: #5a4030;
+        }
+        .fact-box ul { margin: 6px 0 0 16px; }
+        .fact-box li { margin-bottom: 4px; line-height: 1.5; }
+
+        /* Risk result card */
+        .risk-card {
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+            margin: 16px 0;
+        }
+        .risk-score-big { font-size: 52px; font-weight: 600; line-height: 1; }
+        .risk-badge {
+            display: inline-block;
+            font-size: 15px;
+            font-weight: 600;
+            padding: 5px 16px;
+            border-radius: 20px;
+            margin-top: 8px;
+        }
+
+        /* Recommendation card */
+        .rec-card {
+            background: #f7f7f7;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+        .rec-icon  { font-size: 22px; flex-shrink: 0; }
+        .rec-title { font-size: 14px; font-weight: 600; color: #1a1a1a; }
+        .rec-text  { font-size: 13px; color: #555; line-height: 1.5; }
+
+        /* Header bar */
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 14px;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 24px;
+        }
+        .app-title { font-size: 16px; font-weight: 600; }
+        .lang-badge {
+            font-size: 11px;
+            font-weight: 600;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 2px 8px;
+            color: #666;
+        }
+
+        /* ── FIX 1 continued: option buttons in a vertical stack, full width ── */
+        /* Role and region cards use CSS grid for a clean 1-column layout */
+        .option-grid-1col {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        #MainMenu, footer, header { visibility: hidden; }
     </style>""", unsafe_allow_html=True)
+
+
+# ── Model functions ────────────────────────────────────────────────────────────
 
 @st.cache_resource
 def load_model():
@@ -77,29 +174,43 @@ def predict_risk(model, scaler, feature_names, user_inputs):
 
 def rule_based_fallback(user_inputs):
     """Weighted fallback when model files are missing."""
-    score  = (user_inputs.get("MonsoonIntensity", 5) * 3
-            + user_inputs.get("Deforestation",    5) * 2
-            + user_inputs.get("Urbanization",     5) * 2
-            + user_inputs.get("_region_bonus",    3))
+    score = (user_inputs.get("MonsoonIntensity", 5) * 3
+           + user_inputs.get("Deforestation",    5) * 2
+           + user_inputs.get("Urbanization",     5) * 2
+           + user_inputs.get("_region_bonus",    3))
     pct = int(score / (9*3 + 9*2 + 9*2 + 4) * 100)
     if pct < 40: return 0, pct
     if pct < 68: return 1, pct
     return 2, pct
 
+
+# ── UI helpers ─────────────────────────────────────────────────────────────────
+
 def render_header():
-    st.markdown(''''<div class="app-header">
-        <span class="app-title">🌊 Flood Risk</span>
-        <span class="lang-badge">EN</span></div>''''', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="app-header">'
+        '<span class="app-title">🌊 Flood Risk</span>'
+        '<span class="lang-badge">EN</span>'
+        '</div>',
+        unsafe_allow_html=True
+    )
 
 def render_progress(step, total=5):
     st.progress(step / total)
 
 def render_fact_box(items, title="Did you know?"):
     li = "".join(f"<li>{i}</li>" for i in items)
-    st.markdown(f'<div class="fact-box"><strong>{title}</strong><ul>{li}</ul></div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="fact-box"><strong>{title}</strong><ul>{li}</ul></div>',
+        unsafe_allow_html=True
+    )
 
 def render_option_buttons(options, key):
+    """
+    Render option buttons stacked vertically (1 column).
+    FIX 3: font-family:sans-serif in CSS removes the copy icon.
+    Returns the currently selected value.
+    """
     selected = st.session_state.get(key)
     for label, value in options:
         prefix = "✓  " if selected == value else "     "
@@ -110,10 +221,14 @@ def render_option_buttons(options, key):
 
 def render_recommendations(risk_level):
     for icon, title, text in RECOMMENDATIONS[risk_level]:
-        st.markdown(f'<div class="rec-card"><div class="rec-icon">{icon}</div>'
-                    f'<div><div class="rec-title">{title}</div>'
-                    f'<div class="rec-text">{text}</div></div></div>',
-                    unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="rec-card">'
+            f'<div class="rec-icon">{icon}</div>'
+            f'<div><div class="rec-title">{title}</div>'
+            f'<div class="rec-text">{text}</div></div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
 
 def render_risk_result(risk_level, score_pct):
     color  = RISK_COLORS[risk_level]
@@ -123,7 +238,10 @@ def render_risk_result(risk_level, score_pct):
         f'<div class="risk-card" style="background:{color}; border:3px solid {border};">'
         f'<div class="risk-score-big" style="color:{border};">{score_pct}%</div>'
         f'<div class="risk-badge" style="background:{border}; color:white;">{label}</div>'
-        f'</div>', unsafe_allow_html=True)
+        f'</div>',
+        unsafe_allow_html=True
+    )
+
 
 # ── Screens ────────────────────────────────────────────────────────────────────
 
@@ -132,88 +250,128 @@ def screen_who_are_you():
     st.subheader("Is your area at risk?")
     st.caption("Answer some questions")
     st.markdown("**Who are you?**")
+
+    # FIX 1: buttons are already stacked vertically by render_option_buttons
     selected = render_option_buttons([
         ("🏠  City resident — I live in a town or city", "resident"),
         ("🌱  Farmer — I work the land",                  "farmer"),
         ("👔  City mayor — I represent a community",      "mayor"),
     ], key="role")
-    render_fact_box(["Floods affect 1 in 5 people worldwide every year",
-                     "Farmers are the most vulnerable to flood damage",
-                     "Early warning can reduce flood damage by up to 30%"])
+
+    render_fact_box([
+        "Floods affect 1 in 5 people worldwide every year",
+        "Farmers are the most vulnerable to flood damage",
+        "Early warning can reduce flood damage by up to 30%",
+    ])
+
     if selected:
+        # FIX 2: type="primary" → dark bg + white text (handled in CSS)
         if st.button("Continue →", key="go_s2", type="primary"):
-            st.session_state.step = 2; st.rerun()
+            st.session_state.step = 2
+            st.rerun()
+
 
 def screen_region():
-    render_header(); render_progress(1)
+    render_header()
+    render_progress(1)
     st.subheader("Where is your farm?")
     st.caption("Choose your region for accurate advice")
+
+    # FIX 4: meaningful region icons instead of earth globes
     selected = render_option_buttons([
-        ("🌍  Africa — Sahel, East Africa, West Africa", "africa"),
-        ("🌏  Asia — South Asia, Southeast Asia",        "asia"),
-        ("🌎  South America — Amazon region, Andes",     "southamerica"),
+        ("🌾  Africa — Sahel, East Africa, West Africa",   "africa"),
+        ("🌧️  Asia — South Asia, Southeast Asia",           "asia"),
+        ("🌿  South America — Amazon region, Andes",        "southamerica"),
     ], key="region")
-    render_fact_box(["Africa: Sudden flash floods after dry seasons are most dangerous",
-                     "Asia: Monsoon season brings the highest flood risk each year",
-                     "South America: Amazon flooding peaks between January and April"],
-                    title="Your region matters")
+
+    render_fact_box([
+        "Africa: Sudden flash floods after dry seasons are most dangerous",
+        "Asia: Monsoon season brings the highest flood risk each year",
+        "South America: Amazon flooding peaks between January and April",
+    ], title="Your region matters")
+
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("← Back", key="back_s2"): st.session_state.step=1; st.rerun()
+        if st.button("← Back", key="back_s2"):
+            st.session_state.step = 1; st.rerun()
     with c2:
         if selected and st.button("Continue →", key="go_s3", type="primary"):
-            st.session_state.step=3; st.rerun()
+            st.session_state.step = 3; st.rerun()
+
 
 def screen_rainfall():
-    render_header(); render_progress(2)
+    render_header()
+    render_progress(2)
     st.subheader("How often does rain fall on your land?")
     st.caption("Protect your farm and family")
+
     selected = render_option_buttons([
-        ("Very little / None", 1), ("Some rain", 5), ("Heavy rains", 9)
+        ("☀️  Very little / None", 1),
+        ("🌦️  Some rain",          5),
+        ("⛈️  Heavy rains",        9),
     ], key="rain")
+
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("← Back", key="back_s3"): st.session_state.step=2; st.rerun()
+        if st.button("← Back", key="back_s3"):
+            st.session_state.step = 2; st.rerun()
     with c2:
         if selected is not None and st.button("Continue →", key="go_s4", type="primary"):
-            st.session_state.step=4; st.rerun()
+            st.session_state.step = 4; st.rerun()
+
 
 def screen_trees():
-    render_header(); render_progress(3)
+    render_header()
+    render_progress(3)
     st.subheader("Are there trees and vegetation around your farm?")
     st.caption("Protect your farm and family")
+
     selected = render_option_buttons([
-        ("Very few / None", 9), ("Some trees", 5), ("Many trees", 1)
+        ("🪨  Very few / None", 9),
+        ("🌲  Some trees",      5),
+        ("🌳  Many trees",      1),
     ], key="trees")
-    render_fact_box(["Africa: Sudden flash floods after dry seasons are most dangerous",
-                     "Asia: Monsoon season brings the highest flood risk each year",
-                     "South America: Amazon flooding peaks between January and April"],
-                    title="Your region matters")
+
+    render_fact_box([
+        "Africa: Sudden flash floods after dry seasons are most dangerous",
+        "Asia: Monsoon season brings the highest flood risk each year",
+        "South America: Amazon flooding peaks between January and April",
+    ], title="Your region matters")
+
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("← Back", key="back_s4"): st.session_state.step=3; st.rerun()
+        if st.button("← Back", key="back_s4"):
+            st.session_state.step = 3; st.rerun()
     with c2:
         if selected is not None and st.button("Continue →", key="go_s5", type="primary"):
-            st.session_state.step=5; st.rerun()
+            st.session_state.step = 5; st.rerun()
+
 
 def screen_drainage():
-    render_header(); render_progress(4)
+    render_header()
+    render_progress(4)
     st.subheader("How is the ground near your land?")
     st.caption("Protect your farm and family")
+
     selected = render_option_buttons([
-        ("Mostly natural soil / fields", 1),
-        ("Mix of fields and roads", 5),
-        ("Mostly concrete / urban area", 9),
+        ("🌱  Mostly natural soil / fields",    1),
+        ("🛤️  Mix of fields and roads",          5),
+        ("🏙️  Mostly concrete / urban area",     9),
     ], key="drainage")
+
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("← Back", key="back_s5"): st.session_state.step=4; st.rerun()
+        if st.button("← Back", key="back_s5"):
+            st.session_state.step = 4; st.rerun()
     with c2:
         if selected is not None and st.button("See my flood risk →", key="go_result", type="primary"):
-            st.session_state.step=6; st.rerun()
+            st.session_state.step = 6; st.rerun()
+
 
 def screen_results():
-    render_header(); render_progress(5)
+    render_header()
+    render_progress(5)
+
     region_bonus = {"africa": 4, "asia": 3, "southamerica": 2}
     user_inputs = {
         "MonsoonIntensity":   st.session_state.get("rain",     5),
@@ -225,6 +383,7 @@ def screen_results():
         "WetlandLoss":        st.session_state.get("trees",    5),
         "_region_bonus":      region_bonus.get(st.session_state.get("region", "asia"), 3),
     }
+
     model, scaler, feature_names = load_model()
     if model is not None:
         risk_level, score_pct = predict_risk(model, scaler, feature_names, user_inputs)
@@ -232,11 +391,19 @@ def screen_results():
     else:
         risk_level, score_pct = rule_based_fallback(user_inputs)
         source = "rule-based estimate (train model for ML predictions)"
+
     render_risk_result(risk_level, score_pct)
-    headlines = {0:"Your farm is relatively safe", 1:"Take precautions this season", 2:"Your farm needs protection now"}
-    descs = {0:"Flood risk is manageable. Keep monitoring your land.",
-             1:"Moderate risk. Simple measures can significantly reduce damage.",
-             2:"High risk. Immediate action can protect your crops and family."}
+
+    headlines = {
+        0: "Your farm is relatively safe",
+        1: "Take precautions this season",
+        2: "Your farm needs protection now",
+    }
+    descs = {
+        0: "Flood risk is manageable. Keep monitoring your land.",
+        1: "Moderate risk. Simple measures can significantly reduce damage.",
+        2: "High risk. Immediate action can protect your crops and family.",
+    }
     st.markdown(f"### {headlines[risk_level]}")
     st.caption(descs[risk_level])
     st.caption(f"_Source: {source}_")
@@ -244,13 +411,23 @@ def screen_results():
     st.markdown("**Recommended actions**")
     render_recommendations(risk_level)
     st.markdown("---")
+
     if st.button("🔄  Start over", key="restart"):
-        for k in ["step","role","region","rain","trees","drainage"]:
+        for k in ["step", "role", "region", "rain", "trees", "drainage"]:
             st.session_state.pop(k, None)
         st.rerun()
 
-SCREENS = {1: screen_who_are_you, 2: screen_region, 3: screen_rainfall,
-           4: screen_trees, 5: screen_drainage, 6: screen_results}
+
+# ── Router ─────────────────────────────────────────────────────────────────────
+
+SCREENS = {
+    1: screen_who_are_you,
+    2: screen_region,
+    3: screen_rainfall,
+    4: screen_trees,
+    5: screen_drainage,
+    6: screen_results,
+}
 
 def main():
     inject_css()
